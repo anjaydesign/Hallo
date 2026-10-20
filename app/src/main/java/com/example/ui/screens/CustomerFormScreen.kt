@@ -27,8 +27,11 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Save
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.TextButton
+import kotlinx.coroutines.launch
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
@@ -58,6 +61,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -87,7 +91,9 @@ fun CustomerFormScreen(
         onNavigateBack()
     }
 
-    // 19 Fields state
+    val coroutineScope = androidx.compose.runtime.rememberCoroutineScope()
+
+    // 19 Fields state + Versi 3 Fields
     var customerId by remember { mutableStateOf(existingCustomer?.id ?: Customer.generateCustomerId()) }
     var tanggalInput by remember { mutableStateOf(existingCustomer?.tanggalInput ?: Customer.currentTimestampFormatted()) }
     var nama by remember { mutableStateOf(existingCustomer?.nama ?: "") }
@@ -119,6 +125,15 @@ fun CustomerFormScreen(
     var statusPembayaran by remember { mutableStateOf(existingCustomer?.statusPembayaran ?: Customer.STATUS_UNPAID) }
     var catatan by remember { mutableStateOf(existingCustomer?.catatan ?: "") }
 
+    // Versi 3 Fields
+    var pipelineSales by remember { mutableStateOf(existingCustomer?.pipelineSales ?: Customer.PIPELINE_PROSPEK) }
+    var jadwalFollowUp by remember { mutableStateOf(existingCustomer?.jadwalFollowUp ?: "") }
+    var catatanFollowUp by remember { mutableStateOf(existingCustomer?.catatanFollowUp ?: "") }
+
+    // Duplicate Detection Dialog State
+    var duplicateMatches by remember { mutableStateOf<List<Customer>>(emptyList()) }
+    var showDuplicateDialog by remember { mutableStateOf(false) }
+
     // Validation Errors
     var namaError by remember { mutableStateOf(false) }
     var nomorHpError by remember { mutableStateOf(false) }
@@ -126,7 +141,7 @@ fun CustomerFormScreen(
     var nikError by remember { mutableStateOf(false) }
 
     var selectedTabIndex by remember { mutableIntStateOf(0) }
-    val tabTitles = listOf("1. Identitas", "2. Paket & Alamat", "3. Dokumentasi", "4. Status & Catatan")
+    val tabTitles = listOf("1. Identitas", "2. Paket & Alamat", "3. Dokumentasi", "4. Status & CRM")
 
     fun validateForm(): Boolean {
         var isValid = true
@@ -145,13 +160,9 @@ fun CustomerFormScreen(
         return isValid
     }
 
-    fun submitCustomer() {
-        if (!validateForm()) {
-            Toast.makeText(context, "Harap lengkapi semua kolom wajib dengan benar", Toast.LENGTH_SHORT).show()
-            return
-        }
-
+    fun doActualSave() {
         val finalAlamatHomepass = if (isHomepassAlamatSama) alamat else alamatHomepass
+        val selectedPkgObj = wifiPackages.find { it.name.equals(paketWifi, ignoreCase = true) }
 
         val customerToSave = Customer(
             id = customerId,
@@ -163,6 +174,9 @@ fun CustomerFormScreen(
             nik = nik.trim(),
             fotoKtp = fotoKtp,
             paketWifi = paketWifi,
+            kecepatanSnapshot = selectedPkgObj?.speed ?: "",
+            hargaSnapshot = selectedPkgObj?.priceEstimate ?: "",
+            promoSnapshot = selectedPkgObj?.promo ?: "",
             fotoMeteran = fotoMeteran,
             fotoRumahDepan = fotoRumahDepan,
             fotoRumahKanan = fotoRumahKanan,
@@ -172,6 +186,9 @@ fun CustomerFormScreen(
             alamatHomepass = finalAlamatHomepass.trim(),
             statusPengerjaan = statusPengerjaan,
             statusPembayaran = statusPembayaran,
+            pipelineSales = pipelineSales,
+            jadwalFollowUp = jadwalFollowUp.trim(),
+            catatanFollowUp = catatanFollowUp.trim(),
             catatan = catatan.trim(),
             terakhirDiperbarui = Customer.currentTimestampFormatted(),
             updatedBy = viewModel.appSettings.petugasName
@@ -185,6 +202,52 @@ fun CustomerFormScreen(
             },
             onError = { errMsg ->
                 Toast.makeText(context, errMsg, Toast.LENGTH_LONG).show()
+            }
+        )
+    }
+
+    fun submitCustomer() {
+        if (!validateForm()) {
+            Toast.makeText(context, "Harap lengkapi semua kolom wajib dengan benar", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        // Deteksi kemungkinan pelanggan duplikat (NIK, No HP, atau Kode Homepass)
+        coroutineScope.launch {
+            val dups = viewModel.checkDuplicates(nik, nomorHp, kodeHomepass, customerId)
+            if (dups.isNotEmpty()) {
+                duplicateMatches = dups
+                showDuplicateDialog = true
+            } else {
+                doActualSave()
+            }
+        }
+    }
+
+    // Modal Konfirmasi Duplikasi
+    if (showDuplicateDialog) {
+        val dupNames = duplicateMatches.joinToString(", ") { "${it.nama} (${it.id})" }
+        AlertDialog(
+            onDismissRequest = { showDuplicateDialog = false },
+            title = { Text("Peringatan: Potensi Duplikat Terdeteksi", color = Color(0xFFC62828)) },
+            text = {
+                Text("Ditemukan data pelanggan dengan NIK, Nomor HP, atau Kode Homepass serupa:\n\n• $dupNames\n\nApakah Anda yakin ingin tetap menyimpan data pelanggan ini?")
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showDuplicateDialog = false
+                        doActualSave()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MyRepRedPrimary)
+                ) {
+                    Text("Tetap Simpan")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDuplicateDialog = false }) {
+                    Text("Periksa Kembali")
+                }
             }
         )
     }
@@ -521,12 +584,65 @@ fun CustomerFormScreen(
                                                                 fontSize = 12.sp,
                                                                 color = Color.Gray
                                                             )
+                                                            if (pkg.promo.isNotBlank()) {
+                                                                Text(
+                                                                    "Promo: ${pkg.promo}",
+                                                                    fontSize = 11.sp,
+                                                                    color = MyRepRedPrimary
+                                                                )
+                                                            }
                                                         }
                                                     },
                                                     onClick = {
                                                         paketWifi = pkg.name
                                                         packageDropdownExpanded = false
                                                     }
+                                                )
+                                            }
+                                        }
+                                    }
+
+                                    // Snapshot info kartu paket terpilih
+                                    val currentPkg = wifiPackages.find { it.name.equals(paketWifi, ignoreCase = true) }
+                                    if (currentPkg != null) {
+                                        Spacer(modifier = Modifier.height(10.dp))
+                                        Box(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .clip(RoundedCornerShape(8.dp))
+                                                .background(MaterialTheme.colorScheme.surfaceVariant)
+                                                .padding(10.dp)
+                                        ) {
+                                            Column {
+                                                Row(
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    horizontalArrangement = Arrangement.SpaceBetween
+                                                ) {
+                                                    Text(
+                                                        text = "Kecepatan: ${currentPkg.speed}",
+                                                        fontWeight = FontWeight.Bold,
+                                                        fontSize = 13.sp
+                                                    )
+                                                    Text(
+                                                        text = currentPkg.priceEstimate,
+                                                        fontWeight = FontWeight.ExtraBold,
+                                                        fontSize = 13.sp,
+                                                        color = MyRepRedPrimary
+                                                    )
+                                                }
+                                                if (currentPkg.promo.isNotBlank()) {
+                                                    Spacer(modifier = Modifier.height(4.dp))
+                                                    Text(
+                                                        text = "Promo: ${currentPkg.promo}",
+                                                        fontSize = 11.sp,
+                                                        color = Color(0xFF2E7D32),
+                                                        fontWeight = FontWeight.SemiBold
+                                                    )
+                                                }
+                                                Text(
+                                                    text = "*Harga data awal brosur, perlu konfirmasi saat verifikasi.",
+                                                    fontSize = 10.sp,
+                                                    color = Color.Gray
                                                 )
                                             }
                                         }
@@ -650,6 +766,7 @@ fun CustomerFormScreen(
                                 title = "8. Foto KTP Pelanggan",
                                 description = "Pastikan NIK dan nama terbaca jelas",
                                 photoPath = fotoKtp,
+                                targetType = "ktp",
                                 isRequired = true,
                                 onPhotoSelected = { uri ->
                                     val saved = viewModel.processPhoto(uri)
@@ -665,6 +782,7 @@ fun CustomerFormScreen(
                                 title = "10. Foto Meteran Listrik",
                                 description = "Foto nomor ID PLN / kwh meter",
                                 photoPath = fotoMeteran,
+                                targetType = "meteran",
                                 onPhotoSelected = { uri ->
                                     val saved = viewModel.processPhoto(uri)
                                     if (saved != null) fotoMeteran = saved
@@ -679,6 +797,7 @@ fun CustomerFormScreen(
                                 title = "11. Foto Rumah Tampak Depan",
                                 description = "Tampak nomor rumah dan fasad depan",
                                 photoPath = fotoRumahDepan,
+                                targetType = "rumah",
                                 onPhotoSelected = { uri ->
                                     val saved = viewModel.processPhoto(uri)
                                     if (saved != null) fotoRumahDepan = saved
@@ -693,6 +812,7 @@ fun CustomerFormScreen(
                                 title = "12. Foto Rumah Samping Kanan",
                                 description = "Sudut pandang sisi kanan rumah",
                                 photoPath = fotoRumahKanan,
+                                targetType = "rumah",
                                 onPhotoSelected = { uri ->
                                     val saved = viewModel.processPhoto(uri)
                                     if (saved != null) fotoRumahKanan = saved
@@ -707,6 +827,7 @@ fun CustomerFormScreen(
                                 title = "13. Foto Rumah Samping Kiri",
                                 description = "Sudut pandang sisi kiri rumah",
                                 photoPath = fotoRumahKiri,
+                                targetType = "rumah",
                                 onPhotoSelected = { uri ->
                                     val saved = viewModel.processPhoto(uri)
                                     if (saved != null) fotoRumahKiri = saved
@@ -721,6 +842,7 @@ fun CustomerFormScreen(
                                 title = "14. Foto Titik Homepass (FAT / ODP)",
                                 description = "Tiang FAT, kabel drop core, atau box homepass",
                                 photoPath = fotoHomepass,
+                                targetType = "homepass",
                                 onPhotoSelected = { uri ->
                                     val saved = viewModel.processPhoto(uri)
                                     if (saved != null) fotoHomepass = saved
@@ -848,7 +970,153 @@ fun CustomerFormScreen(
                             ) {
                                 Column(modifier = Modifier.padding(14.dp)) {
                                     Text(
-                                        text = "19. Catatan Tambahan",
+                                        text = "Tahap Pipeline Sales CRM",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 14.sp,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                    Spacer(modifier = Modifier.height(8.dp))
+
+                                    var pipelineExpanded by remember { mutableStateOf(false) }
+                                    ExposedDropdownMenuBox(
+                                        expanded = pipelineExpanded,
+                                        onExpandedChange = { pipelineExpanded = !pipelineExpanded }
+                                    ) {
+                                        OutlinedTextField(
+                                            value = pipelineSales,
+                                            onValueChange = {},
+                                            readOnly = true,
+                                            label = { Text("Tahapan Prospek / Pipeline") },
+                                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = pipelineExpanded) },
+                                            modifier = Modifier.menuAnchor().fillMaxWidth(),
+                                            shape = RoundedCornerShape(8.dp)
+                                        )
+
+                                        ExposedDropdownMenu(
+                                            expanded = pipelineExpanded,
+                                            onDismissRequest = { pipelineExpanded = false }
+                                        ) {
+                                            Customer.ALL_PIPELINE_STAGES.forEach { stage ->
+                                                DropdownMenuItem(
+                                                    text = { Text(stage, fontWeight = FontWeight.SemiBold) },
+                                                    onClick = {
+                                                        pipelineSales = stage
+                                                        pipelineExpanded = false
+                                                    }
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        item {
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(12.dp),
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                            ) {
+                                Column(modifier = Modifier.padding(14.dp)) {
+                                    Text(
+                                        text = "Pengingat Jadwal Follow-Up",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 14.sp,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                    Spacer(modifier = Modifier.height(8.dp))
+
+                                    OutlinedTextField(
+                                        value = jadwalFollowUp,
+                                        onValueChange = { jadwalFollowUp = it },
+                                        label = { Text("Tanggal Follow-Up (YYYY-MM-DD)") },
+                                        placeholder = { Text("Contoh: 2026-10-22") },
+                                        modifier = Modifier.fillMaxWidth(),
+                                        shape = RoundedCornerShape(8.dp)
+                                    )
+
+                                    Spacer(modifier = Modifier.height(6.dp))
+
+                                    // Quick date presets
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        val now = java.util.Calendar.getInstance()
+                                        val sdf = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault())
+
+                                        OutlinedButton(
+                                            onClick = { jadwalFollowUp = sdf.format(now.time) },
+                                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                            shape = RoundedCornerShape(6.dp),
+                                            modifier = Modifier.weight(1f)
+                                        ) {
+                                            Text("Hari Ini", fontSize = 10.sp)
+                                        }
+
+                                        OutlinedButton(
+                                            onClick = {
+                                                val c = java.util.Calendar.getInstance()
+                                                c.add(java.util.Calendar.DAY_OF_YEAR, 1)
+                                                jadwalFollowUp = sdf.format(c.time)
+                                            },
+                                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                            shape = RoundedCornerShape(6.dp),
+                                            modifier = Modifier.weight(1f)
+                                        ) {
+                                            Text("Besok", fontSize = 10.sp)
+                                        }
+
+                                        OutlinedButton(
+                                            onClick = {
+                                                val c = java.util.Calendar.getInstance()
+                                                c.add(java.util.Calendar.DAY_OF_YEAR, 3)
+                                                jadwalFollowUp = sdf.format(c.time)
+                                            },
+                                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                            shape = RoundedCornerShape(6.dp),
+                                            modifier = Modifier.weight(1f)
+                                        ) {
+                                            Text("+3 Hari", fontSize = 10.sp)
+                                        }
+
+                                        OutlinedButton(
+                                            onClick = {
+                                                val c = java.util.Calendar.getInstance()
+                                                c.add(java.util.Calendar.DAY_OF_YEAR, 7)
+                                                jadwalFollowUp = sdf.format(c.time)
+                                            },
+                                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                            shape = RoundedCornerShape(6.dp),
+                                            modifier = Modifier.weight(1f)
+                                        ) {
+                                            Text("+1 Mgg", fontSize = 10.sp)
+                                        }
+                                    }
+
+                                    Spacer(modifier = Modifier.height(8.dp))
+
+                                    OutlinedTextField(
+                                        value = catatanFollowUp,
+                                        onValueChange = { catatanFollowUp = it },
+                                        label = { Text("Catatan Rencana Follow-Up") },
+                                        placeholder = { Text("Contoh: Telepon sore hari setelah jam kerja...") },
+                                        modifier = Modifier.fillMaxWidth(),
+                                        shape = RoundedCornerShape(8.dp)
+                                    )
+                                }
+                            }
+                        }
+
+                        item {
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(12.dp),
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                            ) {
+                                Column(modifier = Modifier.padding(14.dp)) {
+                                    Text(
+                                        text = "Catatan Tambahan",
                                         fontWeight = FontWeight.Bold,
                                         fontSize = 14.sp
                                     )

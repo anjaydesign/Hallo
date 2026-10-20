@@ -8,6 +8,7 @@ import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -25,6 +26,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Backup
+import androidx.compose.material.icons.filled.Badge
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CloudDone
 import androidx.compose.material.icons.filled.ContentCopy
@@ -32,8 +35,12 @@ import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Help
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Print
+import androidx.compose.material.icons.filled.Restore
+import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Wifi
+import kotlinx.coroutines.launch
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -586,13 +593,124 @@ fun WifiPackagesTab(viewModel: CustomerViewModel) {
 
 @Composable
 fun ExportAndSecurityTab(context: Context, viewModel: CustomerViewModel) {
+    val coroutineScope = androidx.compose.runtime.rememberCoroutineScope()
     var includeFullNik by remember { mutableStateOf(false) }
+
+    var userRole by remember { mutableStateOf(viewModel.appSettings.userRole) }
+    val roles = listOf("ADMIN" to "Administrator (Penuh)", "SALES" to "Sales Lapangan", "TEKNISI" to "Teknisi Lapangan")
+
+    var showRestoreDialog by remember { mutableStateOf(false) }
+    var jsonRestoreInput by remember { mutableStateOf("") }
+
+    if (showRestoreDialog) {
+        AlertDialog(
+            onDismissRequest = { showRestoreDialog = false },
+            title = { Text("Pulihkan Data dari JSON", fontWeight = FontWeight.Bold) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Tempelkan data JSON cadangan (backup) yang pernah Anda ekspor:", fontSize = 12.sp, color = Color.Gray)
+                    OutlinedTextField(
+                        value = jsonRestoreInput,
+                        onValueChange = { jsonRestoreInput = it },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(180.dp),
+                        placeholder = { Text("[{\"id\": \"MYREP-...\", ...}]", fontSize = 11.sp) }
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (jsonRestoreInput.isNotBlank()) {
+                            coroutineScope.launch {
+                                val result = viewModel.importCustomersFromJson(jsonRestoreInput.trim())
+                                result.onSuccess { count ->
+                                    Toast.makeText(context, "Berhasil memulihkan $count data pelanggan!", Toast.LENGTH_LONG).show()
+                                    showRestoreDialog = false
+                                    jsonRestoreInput = ""
+                                }.onFailure { e ->
+                                    Toast.makeText(context, "Gagal memulihkan: ${e.message}", Toast.LENGTH_LONG).show()
+                                }
+                            }
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MyRepRedPrimary)
+                ) {
+                    Text("Pulihkan Sekarang")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showRestoreDialog = false }) {
+                    Text("Batal")
+                }
+            }
+        )
+    }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
+        // Hak Akses & Peran Pengguna (Modul 11)
+        item {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            Icons.Default.Badge,
+                            contentDescription = null,
+                            tint = MyRepRedPrimary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Hak Akses & Peran Pengguna",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 15.sp
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = "Tentukan peran akun Anda untuk mengelola batas wewenang aplikasi.",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    roles.forEach { (code, label) ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(if (userRole == code) MyRepRedPrimary.copy(alpha = 0.1f) else Color.Transparent)
+                                .clickable {
+                                    userRole = code
+                                    viewModel.appSettings.userRole = code
+                                    Toast.makeText(context, "Peran diubah menjadi: $label", Toast.LENGTH_SHORT).show()
+                                }
+                                .padding(horizontal = 10.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = label,
+                                fontSize = 13.sp,
+                                fontWeight = if (userRole == code) FontWeight.Bold else FontWeight.Normal,
+                                color = if (userRole == code) MyRepRedPrimary else Color.DarkGray
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        // Ekspor Laporan CSV & HTML/PDF (Modul 7 & 15)
         item {
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -609,19 +727,19 @@ fun ExportAndSecurityTab(context: Context, viewModel: CustomerViewModel) {
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "Ekspor Data ke CSV",
+                            text = "Ekspor Laporan (CSV & Cetak PDF)",
                             fontWeight = FontWeight.Bold,
                             fontSize = 15.sp
                         )
                     }
                     Spacer(modifier = Modifier.height(6.dp))
                     Text(
-                        text = "Ekspor daftar pelanggan yang saat ini difilter ke format file CSV yang dapat dibuka di Excel atau Google Sheets.",
+                        text = "Ekspor daftar pelanggan ke file CSV untuk Excel, atau buat laporan HTML siap cetak/simpan PDF.",
                         fontSize = 12.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
 
-                    Spacer(modifier = Modifier.height(10.dp))
+                    Spacer(modifier = Modifier.height(8.dp))
 
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Checkbox(
@@ -629,35 +747,59 @@ fun ExportAndSecurityTab(context: Context, viewModel: CustomerViewModel) {
                             onCheckedChange = { includeFullNik = it }
                         )
                         Text(
-                            text = "Sertakan NIK Lengkap (Khusus Admin / Petugas Berwenang)",
+                            text = "Sertakan NIK Lengkap (Bukan Sensor)",
                             fontSize = 12.sp
                         )
                     }
 
-                    Spacer(modifier = Modifier.height(8.dp))
+                    Spacer(modifier = Modifier.height(10.dp))
 
-                    Button(
-                        onClick = {
-                            val csvContent = viewModel.generateCsvExport(includeFullNik)
-                            val sendIntent = Intent().apply {
-                                action = Intent.ACTION_SEND
-                                putExtra(Intent.EXTRA_TEXT, csvContent)
-                                putExtra(Intent.EXTRA_SUBJECT, "DATA_PELANGGAN_MYREPUBLIC.csv")
-                                type = "text/csv"
-                            }
-                            context.startActivity(Intent.createChooser(sendIntent, "Ekspor CSV Pelanggan"))
-                        },
-                        colors = ButtonDefaults.buttonColors(containerColor = MyRepRedPrimary),
-                        modifier = Modifier.fillMaxWidth()
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Icon(Icons.Default.Download, contentDescription = null)
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("Ekspor & Bagikan File CSV")
+                        Button(
+                            onClick = {
+                                val csvContent = viewModel.generateCsvExport(includeFullNik)
+                                val sendIntent = Intent().apply {
+                                    action = Intent.ACTION_SEND
+                                    putExtra(Intent.EXTRA_TEXT, csvContent)
+                                    putExtra(Intent.EXTRA_SUBJECT, "DATA_PELANGGAN_MYREPUBLIC.csv")
+                                    type = "text/csv"
+                                }
+                                context.startActivity(Intent.createChooser(sendIntent, "Ekspor CSV Pelanggan"))
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = MyRepRedPrimary),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Ekspor CSV", fontSize = 12.sp)
+                        }
+
+                        OutlinedButton(
+                            onClick = {
+                                val htmlReport = viewModel.generatePrintableHtmlReport(includeFullNik)
+                                val sendIntent = Intent().apply {
+                                    action = Intent.ACTION_SEND
+                                    putExtra(Intent.EXTRA_TEXT, htmlReport)
+                                    putExtra(Intent.EXTRA_SUBJECT, "LAPORAN_RESMI_MYREPUBLIC.html")
+                                    type = "text/html"
+                                }
+                                context.startActivity(Intent.createChooser(sendIntent, "Cetak Laporan / PDF"))
+                            },
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(Icons.Default.Print, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Laporan PDF", fontSize = 12.sp)
+                        }
                     }
                 }
             }
         }
 
+        // Backup & Restore Database (Modul 10)
         item {
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -667,23 +809,82 @@ fun ExportAndSecurityTab(context: Context, viewModel: CustomerViewModel) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(
-                            Icons.Default.Lock,
+                            Icons.Default.Backup,
                             contentDescription = null,
                             tint = MyRepRedPrimary,
                             modifier = Modifier.size(20.dp)
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "Keamanan & Kunci Aplikasi",
+                            text = "Cadangkan & Pulihkan Data (JSON)",
                             fontWeight = FontWeight.Bold,
                             fontSize = 15.sp
                         )
                     }
                     Spacer(modifier = Modifier.height(6.dp))
                     Text(
-                        text = "NIK disamarkan secara default pada tampilan daftar pelanggan untuk menjaga kerahasiaan data privasi.",
+                        text = "Amankan seluruh database pelanggan lokal ke file JSON yang dapat disimpan di Google Drive atau dibagikan.",
                         fontSize = 12.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Button(
+                            onClick = {
+                                val jsonBackup = viewModel.exportAllCustomersAsJson()
+                                val sendIntent = Intent().apply {
+                                    action = Intent.ACTION_SEND
+                                    putExtra(Intent.EXTRA_TEXT, jsonBackup)
+                                    putExtra(Intent.EXTRA_SUBJECT, "BACKUP_DATA_PELANGGAN_MYREPUBLIC.json")
+                                    type = "application/json"
+                                }
+                                context.startActivity(Intent.createChooser(sendIntent, "Simpan File Backup JSON"))
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF263238)),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(Icons.Default.Backup, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Cadangkan Data", fontSize = 11.sp)
+                        }
+
+                        OutlinedButton(
+                            onClick = { showRestoreDialog = true },
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(Icons.Default.Restore, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Pulihkan Data", fontSize = 11.sp)
+                        }
+                    }
+                }
+            }
+        }
+
+        // Prosedur Backup Spreadsheet
+        item {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        text = "Prosedur Pemulihan & Backup Google Sheets",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 14.sp,
+                        color = MyRepRedPrimary
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = "1. Buka spreadsheet database di browser HP.\n2. Pilih menu 'File' -> 'Buat Salinan' (Make a copy) setiap akhir pekan.\n3. Jika spreadsheet tidak sengaja terhapus, Anda dapat memulihkannya dari menu 'Riwayat Versi' (Version history) Google Sheets atau mengimpor file backup JSON di atas.",
+                        fontSize = 12.sp,
+                        lineHeight = 18.sp
                     )
                 }
             }

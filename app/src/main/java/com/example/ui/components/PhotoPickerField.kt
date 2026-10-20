@@ -45,7 +45,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.core.content.FileProvider
 import coil.compose.AsyncImage
 import java.io.File
 
@@ -54,6 +53,7 @@ fun PhotoPickerField(
     title: String,
     description: String,
     photoPath: String,
+    targetType: String = "general", // "ktp", "meteran", "rumah", "homepass"
     isRequired: Boolean = false,
     onPhotoSelected: (Uri) -> Unit,
     onPhotoCleared: () -> Unit,
@@ -61,16 +61,7 @@ fun PhotoPickerField(
 ) {
     val context = LocalContext.current
     var showPreview by remember { mutableStateOf(false) }
-    var tempCameraUri by remember { mutableStateOf<Uri?>(null) }
-
-    // Launcher for Camera
-    val cameraLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.TakePicture()
-    ) { success ->
-        if (success && tempCameraUri != null) {
-            onPhotoSelected(tempCameraUri!!)
-        }
-    }
+    var showCameraX by remember { mutableStateOf(false) }
 
     // Launcher for Gallery
     val galleryLauncher = rememberLauncherForActivityResult(
@@ -79,6 +70,18 @@ fun PhotoPickerField(
         if (uri != null) {
             onPhotoSelected(uri)
         }
+    }
+
+    // CameraX Dedicated Component Modal
+    if (showCameraX) {
+        CameraCaptureComponent(
+            title = title,
+            targetType = targetType,
+            onPhotoCaptured = { savedFile ->
+                onPhotoSelected(Uri.fromFile(savedFile))
+            },
+            onDismiss = { showCameraX = false }
+        )
     }
 
     if (showPreview && photoPath.isNotBlank()) {
@@ -158,30 +161,17 @@ fun PhotoPickerField(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 OutlinedButton(
-                    onClick = {
-                        try {
-                            val tempFile = File.createTempFile("cam_", ".jpg", context.cacheDir)
-                            val uri = FileProvider.getUriForFile(
-                                context,
-                                "${context.packageName}.fileprovider",
-                                tempFile
-                            )
-                            tempCameraUri = uri
-                            cameraLauncher.launch(uri)
-                        } catch (e: Exception) {
-                            e.printStackTrace()
-                        }
-                    },
+                    onClick = { showCameraX = true },
                     modifier = Modifier.weight(1f),
                     contentPadding = ButtonDefaults.ContentPadding
                 ) {
                     Icon(
                         Icons.Default.CameraAlt,
-                        contentDescription = "Kamera",
+                        contentDescription = "CameraX",
                         modifier = Modifier.size(18.dp)
                     )
                     Spacer(modifier = Modifier.width(6.dp))
-                    Text("Kamera", fontSize = 13.sp)
+                    Text("Kamera HP", fontSize = 13.sp)
                 }
 
                 OutlinedButton(

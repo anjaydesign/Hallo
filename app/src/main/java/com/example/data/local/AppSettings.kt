@@ -16,7 +16,27 @@ class AppSettings(context: Context) {
         private const val KEY_PASSCODE_ENABLED = "passcode_enabled"
         private const val KEY_WIFI_PACKAGES = "wifi_packages_json"
         private const val KEY_LAST_SYNC_TIME = "last_sync_time"
+        private const val KEY_TARGET_DAILY = "target_daily"
+        private const val KEY_TARGET_WEEKLY = "target_weekly"
+        private const val KEY_TARGET_MONTHLY = "target_monthly"
+        private const val KEY_USER_ROLE = "user_role"
     }
+
+    var dailySalesTarget: Int
+        get() = prefs.getInt(KEY_TARGET_DAILY, 3)
+        set(value) = prefs.edit().putInt(KEY_TARGET_DAILY, value.coerceAtLeast(1)).apply()
+
+    var weeklySalesTarget: Int
+        get() = prefs.getInt(KEY_TARGET_WEEKLY, 15)
+        set(value) = prefs.edit().putInt(KEY_TARGET_WEEKLY, value.coerceAtLeast(1)).apply()
+
+    var monthlySalesTarget: Int
+        get() = prefs.getInt(KEY_TARGET_MONTHLY, 50)
+        set(value) = prefs.edit().putInt(KEY_TARGET_MONTHLY, value.coerceAtLeast(1)).apply()
+
+    var userRole: String
+        get() = prefs.getString(KEY_USER_ROLE, "ADMIN") ?: "ADMIN"
+        set(value) = prefs.edit().putString(KEY_USER_ROLE, value).apply()
 
     var webAppUrl: String
         get() = prefs.getString(KEY_WEB_APP_URL, "") ?: ""

@@ -20,6 +20,9 @@ interface CustomerDao {
     @Query("SELECT * FROM customers WHERE syncPending = 1")
     suspend fun getPendingSyncCustomers(): List<Customer>
 
+    @Query("SELECT * FROM customers WHERE id != :excludeId AND ((nik != '' AND nik = :nik) OR (nomorHp != '' AND nomorHp = :phone) OR (kodeHomepass != '' AND kodeHomepass = :homepass))")
+    suspend fun findDuplicates(nik: String, phone: String, homepass: String, excludeId: String): List<Customer>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertCustomer(customer: Customer)
 

@@ -11,8 +11,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -27,27 +25,35 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.CalendarToday
+import androidx.compose.material.icons.filled.Cancel
 import androidx.compose.material.icons.filled.Chat
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Map
+import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
-import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -94,6 +100,8 @@ fun CustomerDetailScreen(
     var showPengerjaanDialog by remember { mutableStateOf(false) }
     var showPembayaranDialog by remember { mutableStateOf(false) }
     var showDeleteDialog by remember { mutableStateOf(false) }
+    var showPipelineDialog by remember { mutableStateOf(false) }
+    var showWhatsAppDialog by remember { mutableStateOf(false) }
 
     // Preview photo dialog
     var previewPhotoPath by remember { mutableStateOf<String?>(null) }
@@ -161,6 +169,120 @@ fun CustomerDetailScreen(
             },
             dismissButton = {
                 TextButton(onClick = { showPembayaranDialog = false }) {
+                    Text("Batal")
+                }
+            }
+        )
+    }
+
+    // Ubah Pipeline Sales Dialog
+    if (showPipelineDialog) {
+        AlertDialog(
+            onDismissRequest = { showPipelineDialog = false },
+            title = { Text("Ubah Tahap Pipeline Sales") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Customer.ALL_PIPELINE_STAGES.forEach { stage ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(6.dp))
+                                .clickable {
+                                    viewModel.updatePipelineStatus(customer.id, stage) {
+                                        Toast.makeText(context, "Tahap pipeline diubah: $stage", Toast.LENGTH_SHORT).show()
+                                    }
+                                    showPipelineDialog = false
+                                }
+                                .padding(vertical = 8.dp, horizontal = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = stage,
+                                fontWeight = if (customer.pipelineSales == stage) FontWeight.Bold else FontWeight.Normal,
+                                color = if (customer.pipelineSales == stage) MyRepRedPrimary else Color.DarkGray
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = {
+                TextButton(onClick = { showPipelineDialog = false }) {
+                    Text("Batal")
+                }
+            }
+        )
+    }
+
+    // WhatsApp Template Selector & Editor Dialog
+    if (showWhatsAppDialog) {
+        val (completeness, missing) = customer.getCompleteness()
+        val missingStr = if (missing.isEmpty()) "Sudah Lengkap" else missing.joinToString(", ")
+
+        val templates = listOf(
+            "1. Konfirmasi Minat" to "Halo Bapak/Ibu ${customer.nama}, kami dari tim MyRepublic ingin mengonfirmasi permohonan pasang baru paket WiFi ${customer.paketWifi} (${customer.kecepatanSnapshot.ifBlank { "Broadband" }}). Apakah ada pertanyaan seputar promo atau paket?",
+            "2. Pengingat Dokumen" to "Halo Bapak/Ibu ${customer.nama}, untuk memproses pemasangan WiFi MyRepublic, mohon bantuannya melengkapi berkas: $missingStr. Terima kasih!",
+            "3. Konfirmasi Homepass" to "Halo Bapak/Ibu ${customer.nama}, teknisi MyRepublic sedang memeriksa jalur tiang FAT/Homepass terdekat di lokasi ${customer.alamat}. Mohon pastikan nomor ini aktif.",
+            "4. Jadwal Pemasangan" to "Halo Bapak/Ibu ${customer.nama}, jadwal instalasi WiFi MyRepublic paket ${customer.paketWifi} telah diagendakan. Mohon dipastikan ada pihak keluarga di rumah."
+        )
+
+        var selectedTemplateIndex by remember { mutableStateOf(0) }
+        var messageBody by remember { mutableStateOf(templates[0].second) }
+
+        AlertDialog(
+            onDismissRequest = { showWhatsAppDialog = false },
+            title = { Text("Pilih & Edit Pesan WhatsApp") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Pilih Template Pesan:", fontSize = 12.sp, color = Color.Gray)
+                    templates.forEachIndexed { idx, (label, body) ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(if (selectedTemplateIndex == idx) MyRepRedPrimary.copy(alpha = 0.1f) else Color.Transparent)
+                                .clickable {
+                                    selectedTemplateIndex = idx
+                                    messageBody = body
+                                }
+                                .padding(horizontal = 8.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = label,
+                                fontSize = 12.sp,
+                                fontWeight = if (selectedTemplateIndex == idx) FontWeight.Bold else FontWeight.Normal,
+                                color = if (selectedTemplateIndex == idx) MyRepRedPrimary else Color.DarkGray
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text("Edit Pesan Sebelum Dikirim:", fontSize = 12.sp, color = Color.Gray)
+                    OutlinedTextField(
+                        value = messageBody,
+                        onValueChange = { messageBody = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        minLines = 4,
+                        shape = RoundedCornerShape(8.dp)
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        openWhatsAppWithText(context, customer.nomorHp, messageBody)
+                        showWhatsAppDialog = false
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF25D366))
+                ) {
+                    Icon(Icons.Default.Send, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Kirim WhatsApp")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showWhatsAppDialog = false }) {
                     Text("Batal")
                 }
             }
@@ -284,7 +406,43 @@ fun CustomerDetailScreen(
 
                         Spacer(modifier = Modifier.height(14.dp))
 
-                        // Status badges & Quick toggles
+                        // Pipeline Sales Stage
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column {
+                                Text("Tahap Pipeline Sales:", fontSize = 11.sp, color = Color.Gray)
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .background(Color(0xFFE0F2F1))
+                                        .padding(horizontal = 8.dp, vertical = 3.dp)
+                                ) {
+                                    Text(
+                                        text = customer.pipelineSales,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 11.sp,
+                                        color = Color(0xFF00695C)
+                                    )
+                                }
+                            }
+                            OutlinedButton(
+                                onClick = { showPipelineDialog = true },
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Icon(Icons.Default.SwapHoriz, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Ubah Pipeline", fontSize = 11.sp)
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        // Status pengerjaan toggle
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween,
@@ -308,6 +466,7 @@ fun CustomerDetailScreen(
 
                         Spacer(modifier = Modifier.height(8.dp))
 
+                        // Status pembayaran toggle
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween,
@@ -332,14 +491,14 @@ fun CustomerDetailScreen(
                 }
             }
 
-            // Quick Actions: WhatsApp & Google Maps
+            // Quick Actions: WhatsApp (dengan Template) & Google Maps
             item {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     Button(
-                        onClick = { openWhatsApp(context, customer.nomorHp, customer.nama) },
+                        onClick = { showWhatsAppDialog = true },
                         modifier = Modifier.weight(1f),
                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF25D366))
                     ) {
@@ -360,6 +519,80 @@ fun CustomerDetailScreen(
                 }
             }
 
+            // Checklist Kelengkapan Dokumen & Survei
+            item {
+                val (score, missingList) = customer.getCompleteness()
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "Checklist Kelengkapan Dokumen",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 15.sp,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                            Text(
+                                text = "$score%",
+                                fontWeight = FontWeight.ExtraBold,
+                                fontSize = 16.sp,
+                                color = if (score == 100) Color(0xFF2E7D32) else Color(0xFFF57C00)
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(6.dp))
+                        LinearProgressIndicator(
+                            progress = { score / 100f },
+                            modifier = Modifier.fillMaxWidth().height(6.dp).clip(CircleShape),
+                            color = if (score == 100) Color(0xFF2E7D32) else Color(0xFFF57C00),
+                            trackColor = Color.LightGray.copy(alpha = 0.3f)
+                        )
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        val checkItems = listOf(
+                            "Nama & Nomor WhatsApp" to (customer.nama.isNotBlank() && customer.nomorHp.isNotBlank()),
+                            "NIK 16 Digit" to (customer.nik.length == 16),
+                            "Alamat Lengkap Pemasangan" to customer.alamat.isNotBlank(),
+                            "Paket WiFi Pilihan" to customer.paketWifi.isNotBlank(),
+                            "Foto KTP Pelanggan" to customer.fotoKtp.isNotBlank(),
+                            "Foto Meteran Listrik" to customer.fotoMeteran.isNotBlank(),
+                            "Foto Rumah Depan" to customer.fotoRumahDepan.isNotBlank(),
+                            "Foto Sisi Kanan/Kiri" to (customer.fotoRumahKanan.isNotBlank() && customer.fotoRumahKiri.isNotBlank()),
+                            "Data Titik Homepass / FAT" to (customer.fotoHomepass.isNotBlank() || customer.kodeHomepass.isNotBlank())
+                        )
+
+                        checkItems.forEach { (label, isOk) ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = if (isOk) Icons.Default.CheckCircle else Icons.Default.Cancel,
+                                    contentDescription = null,
+                                    tint = if (isOk) Color(0xFF2E7D32) else Color(0xFFE57373),
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = label,
+                                    fontSize = 12.sp,
+                                    color = if (isOk) MaterialTheme.colorScheme.onSurface else Color.Gray,
+                                    fontWeight = if (isOk) FontWeight.Medium else FontWeight.Normal
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
             // Data Pelanggan Details Card
             item {
                 Card(
@@ -369,7 +602,7 @@ fun CustomerDetailScreen(
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
                         Text(
-                            text = "Informasi Pemasangan",
+                            text = "Informasi Pemasangan & Paket",
                             fontWeight = FontWeight.Bold,
                             fontSize = 15.sp,
                             color = MaterialTheme.colorScheme.primary
@@ -377,6 +610,16 @@ fun CustomerDetailScreen(
                         Spacer(modifier = Modifier.height(10.dp))
 
                         DetailRow(label = "Paket WiFi", value = customer.paketWifi.ifBlank { "Standar" })
+                        if (customer.kecepatanSnapshot.isNotBlank()) {
+                            DetailRow(label = "Kecepatan Paket", value = customer.kecepatanSnapshot)
+                        }
+                        if (customer.hargaSnapshot.isNotBlank()) {
+                            DetailRow(label = "Harga Bulanan (Snapshot)", value = customer.hargaSnapshot)
+                        }
+                        if (customer.promoSnapshot.isNotBlank()) {
+                            DetailRow(label = "Promo (Snapshot)", value = customer.promoSnapshot)
+                        }
+
                         DetailRow(label = "Nomor HP / WA", value = customer.nomorHp)
                         DetailRow(label = "Email", value = customer.email.ifBlank { "-" })
 
@@ -409,6 +652,10 @@ fun CustomerDetailScreen(
                         DetailRow(label = "Alamat Pemasangan", value = customer.alamat)
                         DetailRow(label = "Kode Homepass", value = customer.kodeHomepass.ifBlank { "-" })
                         DetailRow(label = "Alamat Homepass", value = customer.alamatHomepass.ifBlank { customer.alamat })
+                        DetailRow(label = "Jadwal Follow-Up", value = customer.jadwalFollowUp.ifBlank { "Belum Dijadwalkan" })
+                        if (customer.catatanFollowUp.isNotBlank()) {
+                            DetailRow(label = "Catatan Follow-Up", value = customer.catatanFollowUp)
+                        }
                         DetailRow(label = "Tanggal Input", value = customer.tanggalInput)
                         DetailRow(label = "Terakhir Diperbarui", value = customer.terakhirDiperbarui)
                         DetailRow(label = "Catatan", value = customer.catatan.ifBlank { "-" })
@@ -553,18 +800,17 @@ fun DetailRow(label: String, value: String) {
     }
 }
 
-fun openWhatsApp(context: Context, rawPhone: String, customerName: String) {
+fun openWhatsAppWithText(context: Context, rawPhone: String, message: String) {
     try {
         var cleanPhone = rawPhone.replace(Regex("[^0-9]"), "")
         if (cleanPhone.startsWith("0")) {
             cleanPhone = "62" + cleanPhone.substring(1)
         }
-        val message = "Halo $customerName, kami dari tim pemasangan WiFi MyRepublic terkait permohonan instalasi internet Anda."
         val uri = Uri.parse("https://api.whatsapp.com/send?phone=$cleanPhone&text=${URLEncoder.encode(message, "UTF-8")}")
         val intent = Intent(Intent.ACTION_VIEW, uri)
         context.startActivity(intent)
     } catch (e: Exception) {
-        Toast.makeText(context, "Tidak dapat membuka WhatsApp: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
+        Toast.makeText(context, "Tidak dapat membuka WhatsApp", Toast.LENGTH_SHORT).show()
     }
 }
 
@@ -585,16 +831,21 @@ fun openGoogleMaps(context: Context, address: String) {
 }
 
 fun shareCustomerReport(context: Context, c: Customer) {
+    val (score, _) = c.getCompleteness()
     val report = """
 === DATA PELANGGAN MYREPUBLIC ===
 ID Pelanggan: ${c.id}
 Nama: ${c.nama}
 No. HP: ${c.nomorHp}
-Paket: ${c.paketWifi}
+Paket: ${c.paketWifi} (${c.kecepatanSnapshot})
+Harga: ${c.hargaSnapshot}
 Alamat: ${c.alamat}
 Homepass: ${c.kodeHomepass} (${c.alamatHomepass})
+Pipeline: ${c.pipelineSales}
+Kelengkapan Berkas: $score%
 Status Pengerjaan: ${c.statusPengerjaan}
 Status Pembayaran: ${c.statusPembayaran}
+Jadwal Follow-Up: ${c.jadwalFollowUp.ifBlank { "-" }}
 Tanggal Input: ${c.tanggalInput}
 Catatan: ${c.catatan.ifBlank { "-" }}
 Terakhir Diperbarui: ${c.terakhirDiperbarui}
