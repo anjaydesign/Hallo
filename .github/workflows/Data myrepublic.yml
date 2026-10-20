@@ -26,12 +26,13 @@ jobs:
           java-version: '21'
 
       - name: Download Gradle 9.3.1
+        shell: bash
         run: |
-          curl -fsSLo "$RUNNER_TEMP/gradle.zip" https://services.gradle.org/distributions/gradle-9.3.1-bin.zip
+          curl -fsSLo "$RUNNER_TEMP/gradle.zip" "https://services.gradle.org/distributions/gradle-9.3.1-bin.zip"
           unzip -q "$RUNNER_TEMP/gradle.zip" -d "$RUNNER_TEMP"
 
       - name: Build APK
-        run: "$RUNNER_TEMP/gradle-9.3.1/bin/gradle" :app:assembleDebug --no-daemon
+        run: '"$RUNNER_TEMP/gradle-9.3.1/bin/gradle" :app:assembleDebug --no-daemon'
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
