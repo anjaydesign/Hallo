@@ -1,0 +1,6 @@
+{
+  "name": "DATA PELANGGAN",
+  "description": "Aplikasi pendataan, pemantauan status pengerjaan, dan status pembayaran pelanggan WiFi MyRepublic terintegrasi Google Sheets & Drive",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
