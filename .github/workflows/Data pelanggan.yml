@@ -25,14 +25,13 @@ jobs:
           distribution: temurin
           java-version: '21'
 
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v6
-
-      - name: Prepare Gradle wrapper
-        run: chmod +x ./gradlew
+      - name: Download Gradle 9.3.1
+        run: |
+          curl -fsSLo "$RUNNER_TEMP/gradle.zip" https://services.gradle.org/distributions/gradle-9.3.1-bin.zip
+          unzip -q "$RUNNER_TEMP/gradle.zip" -d "$RUNNER_TEMP"
 
       - name: Build APK
-        run: ./gradlew :app:assembleDebug --no-daemon
+        run: "$RUNNER_TEMP/gradle-9.3.1/bin/gradle" :app:assembleDebug --no-daemon
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
